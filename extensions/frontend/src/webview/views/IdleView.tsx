@@ -73,10 +73,12 @@ export function IdleView({ gitState, modeFiles, filesLoading, configured, onMode
 
   return (
     <div class="setup">
-      <button type="button" class="mode-param-input" disabled={running || filesLoading}
-        title={gitState.workspaceFolder?.path} onClick={onSelectWorkspace}>
-        {t('view.idle.project')}: {gitState.workspaceFolder?.name ?? t('view.idle.selectWorkspace')}
-      </button>
+      {gitState.workspaceFolder && (
+        <button type="button" class="mode-param-input" disabled={running || filesLoading}
+          title={gitState.workspaceFolder.path} onClick={onSelectWorkspace}>
+          {t('view.idle.project')}: {gitState.workspaceFolder.name}
+        </button>
+      )}
       <div class="mode-tabs">
         {([ReviewMode.Workspace, ReviewMode.Branch, ReviewMode.Commit]).map((m) => (
           <button key={m} class={`mode-tab${mode === m ? ' active' : ''}`} onClick={() => switchMode(m)}>
