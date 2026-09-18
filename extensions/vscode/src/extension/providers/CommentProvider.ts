@@ -58,7 +58,10 @@ export class CommentProvider {
     this.comments = comments;
 
     const root = await git.getRepositoryRoot();
-    if (!root) return;
+    if (!root) {
+      this.emitSync();
+      return;
+    }
     this.reviewRoot = root;
 
     await this.git.prepareReviewFileStatus(ctx);

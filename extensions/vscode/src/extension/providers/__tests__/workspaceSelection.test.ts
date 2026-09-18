@@ -9,6 +9,7 @@ import { promisify } from 'util';
 import * as vscode from 'vscode';
 import { HostToWebview, WebviewToHost } from '../../../shared/messages';
 import { ReviewMode } from '../../../shared/types';
+import { initialState, reducer } from '../../../webview/store';
 import { GitService } from '../../services/GitService';
 import { CommentProvider } from '../CommentProvider';
 import { SidebarProvider } from '../SidebarProvider';
@@ -47,14 +48,14 @@ describe('workspace selection', () => {
     await rm(temp, { recursive: true, force: true });
   });
 
-  function sidebar(git = new GitService()) {
+  function sidebar(git = new GitService(), commentProvider?: CommentProvider) {
     const cli = { review: jest.fn().mockResolvedValue(result), cancel: jest.fn() };
     const comments = { onSync: jest.fn(), show: jest.fn(), clear: jest.fn() };
     const posts: HostToWebview[] = [];
     const watch = jest.spyOn(GitService.prototype, 'watchWorkspaceChanges')
       .mockImplementation(() => ({ dispose: jest.fn() }));
     let handle!: (message: WebviewToHost) => Promise<void>;
-    const provider = new SidebarProvider(first.uri, cli as any, { read: () => null } as any, git, comments as any);
+    const provider = new SidebarProvider(first.uri, cli as any, { read: () => null } as any, git, (commentProvider ?? comments) as any);
     provider.resolveWebviewView({
       webview: {
         asWebviewUri: (uri: vscode.Uri) => uri,
@@ -133,6 +134,28 @@ describe('workspace selection', () => {
     });
     await handle({ type: 'selectWorkspace' });
     expect(posts).toContainEqual(expect.objectContaining({ type: 'workspaceChanged' }));
+  });
+
+  it('keeps results visible without jump links when the repository disappears during review', async () => {
+    const git = new GitService(undefined, second);
+    const comments = new CommentProvider(first.uri, git);
+    const { handle, cli, posts } = sidebar(git, comments);
+    const reviewed = { ...result, comments: [{ path: 'shared.ts', content: 'Review finding', startLine: 1, endLine: 1 }] };
+    cli.review.mockImplementation(async () => {
+      await rm(path.join(second.uri.fsPath, '.git'), { recursive: true, force: true });
+      return reviewed;
+    });
+
+    await handle({ type: 'startReview', options: { mode: ReviewMode.Workspace } });
+
+    expect(posts).toContainEqual({
+      type: 'commentSync', comments: [{ index: 0, status: 'pending', jumpable: false }],
+    });
+    const state = posts.reduce(reducer, initialState);
+    expect(state.view).toBe('done');
+    expect(state.session.result).toEqual(reviewed);
+    expect(state.commentJumpable[0]).toBe(false);
+    comments.dispose();
   });
 
   it('keeps visible project options tied to their repository while the next project loads', async () => {
